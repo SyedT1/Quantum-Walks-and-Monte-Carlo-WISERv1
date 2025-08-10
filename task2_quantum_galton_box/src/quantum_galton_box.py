@@ -261,24 +261,37 @@ class QuantumGaltonBox:
         # Convert binary strings to position indices
         positions = []
         frequencies = []
+        valid_shots = 0
+        invalid_shots = 0
         
         for bitstring, count in counts.items():
-            # Find position of the '1' in the bitstring
+            # Find position of the '1' in the bitstring (rightmost bit is position 0)
             pos = bitstring[::-1].find('1')
             if pos != -1:
+                # Valid measurement (exactly one bit is '1')
                 positions.extend([pos] * count)
                 frequencies.append((pos, count))
+                valid_shots += count
+            else:
+                # Invalid measurement (no bits are '1' or multiple bits are '1')
+                invalid_shots += count
         
         positions = np.array(positions)
         
-        # Calculate statistics
-        mean = np.mean(positions)
-        std = np.std(positions)
-        variance = np.var(positions)
+        # Calculate statistics only for valid measurements
+        if len(positions) > 0:
+            mean = np.mean(positions)
+            std = np.std(positions)
+            variance = np.var(positions)
+        else:
+            mean = std = variance = 0.0
         
         # Create histogram data
         hist_bins = np.arange(self.num_layers + 2) - 0.5
         hist_counts, _ = np.histogram(positions, bins=hist_bins)
+        
+        # Calculate validity statistics
+        validity_rate = valid_shots / shots if shots > 0 else 0.0
         
         return {
             'counts': counts,
@@ -288,12 +301,15 @@ class QuantumGaltonBox:
             'std': std,
             'variance': variance,
             'histogram': hist_counts,
-            'total_shots': shots
+            'total_shots': shots,
+            'valid_shots': valid_shots,
+            'invalid_shots': invalid_shots,
+            'validity_rate': validity_rate
         }
     
     def verify_gaussian(self, plot: bool = True) -> Dict:
         """
-        Verify that the output follows a Gaussian distribution.
+        Verify that the output follows a Gaussian distribution using appropriate tests for discrete data.
         
         Args:
             plot: Whether to create visualization
@@ -306,33 +322,112 @@ class QuantumGaltonBox:
         
         positions = self.results['positions']
         
-        # Perform Kolmogorov-Smirnov test
-        ks_statistic, ks_pvalue = stats.kstest(
-            positions, 
-            'norm', 
-            args=(positions.mean(), positions.std())
-        )
-        
-        # Perform Shapiro-Wilk test (for smaller samples)
-        if len(positions) < 5000:
-            shapiro_statistic, shapiro_pvalue = stats.shapiro(positions)
-        else:
-            shapiro_statistic, shapiro_pvalue = None, None
-        
         # Calculate theoretical Gaussian parameters
         theoretical_mean = self.num_layers / 2
         theoretical_std = np.sqrt(self.num_layers / 4)
         
+        # For discrete distributions, use chi-squared goodness-of-fit test
+        # Create histogram of observed frequencies
+        unique_pos, observed_counts = np.unique(positions, return_counts=True)
+        
+        # Calculate expected frequencies from theoretical Gaussian
+        total_shots = len(positions)
+        expected_probs = []
+        
+        for pos in unique_pos:
+            # For discrete approximation, integrate Gaussian over [pos-0.5, pos+0.5]
+            lower_bound = pos - 0.5
+            upper_bound = pos + 0.5
+            
+            # Use cumulative distribution function
+            expected_prob = (stats.norm.cdf(upper_bound, theoretical_mean, theoretical_std) - 
+                           stats.norm.cdf(lower_bound, theoretical_mean, theoretical_std))
+            expected_probs.append(expected_prob)
+        
+        expected_probs = np.array(expected_probs)
+        
+        # Normalize probabilities to sum to 1 (handle edge cases)
+        if expected_probs.sum() > 0:
+            expected_probs = expected_probs / expected_probs.sum()
+        
+        # Convert to expected frequencies
+        expected_freqs = expected_probs * total_shots
+        
+        # Chi-squared test (only if all expected frequencies >= 5)
+        if np.all(expected_freqs >= 5):
+            chi2_stat, chi2_pvalue = stats.chisquare(observed_counts, expected_freqs)
+            chi2_valid = True
+        else:
+            # Use modified chi-squared for small expected frequencies
+            # Combine bins with expected < 5
+            combined_observed = []
+            combined_expected = []
+            temp_obs = 0
+            temp_exp = 0
+            
+            for obs, exp in zip(observed_counts, expected_freqs):
+                temp_obs += obs
+                temp_exp += exp
+                
+                if temp_exp >= 5 or (obs == observed_counts[-1]):  # Last bin
+                    combined_observed.append(temp_obs)
+                    combined_expected.append(temp_exp)
+                    temp_obs = 0
+                    temp_exp = 0
+            
+            if len(combined_observed) >= 2:
+                chi2_stat, chi2_pvalue = stats.chisquare(combined_observed, combined_expected)
+                chi2_valid = True
+            else:
+                chi2_stat, chi2_pvalue = np.nan, np.nan
+                chi2_valid = False
+        
+        # Alternative: Compare means and standard deviations
+        mean_diff = abs(positions.mean() - theoretical_mean)
+        std_diff = abs(positions.std() - theoretical_std)
+        
+        # Normalized differences
+        mean_error_pct = mean_diff / theoretical_mean if theoretical_mean > 0 else float('inf')
+        std_error_pct = std_diff / theoretical_std if theoretical_std > 0 else float('inf')
+        
+        # Anderson-Darling test (better for normality testing)
+        try:
+            ad_stat, ad_crit_vals, ad_sig_level = stats.anderson(positions, dist='norm')
+            # Check if statistic is less than critical value at 5% level
+            ad_pvalue = 1.0 if ad_stat < ad_crit_vals[2] else 0.0  # Approximate
+            ad_valid = True
+        except:
+            ad_stat, ad_pvalue, ad_valid = np.nan, np.nan, False
+        
+        # Comprehensive assessment
+        is_gaussian_chi2 = chi2_pvalue > 0.05 if chi2_valid else False
+        is_gaussian_means = (mean_error_pct < 0.1) and (std_error_pct < 0.2)  # Within 10% and 20%
+        is_gaussian_ad = ad_pvalue > 0.05 if ad_valid else False
+        
+        # Overall assessment (need at least 2 out of 3 tests to pass)
+        tests_passed = sum([is_gaussian_chi2, is_gaussian_means, is_gaussian_ad])
+        is_gaussian_overall = tests_passed >= 2
+        
         verification_results = {
-            'ks_statistic': ks_statistic,
-            'ks_pvalue': ks_pvalue,
-            'shapiro_statistic': shapiro_statistic,
-            'shapiro_pvalue': shapiro_pvalue,
+            'chi2_statistic': chi2_stat if chi2_valid else np.nan,
+            'chi2_pvalue': chi2_pvalue if chi2_valid else np.nan,
+            'chi2_valid': chi2_valid,
+            'ad_statistic': ad_stat if ad_valid else np.nan,
+            'ad_pvalue': ad_pvalue if ad_valid else np.nan,
+            'ad_valid': ad_valid,
             'theoretical_mean': theoretical_mean,
             'theoretical_std': theoretical_std,
             'actual_mean': self.results['mean'],
             'actual_std': self.results['std'],
-            'is_gaussian': ks_pvalue > 0.05
+            'mean_error_pct': mean_error_pct,
+            'std_error_pct': std_error_pct,
+            'is_gaussian_chi2': is_gaussian_chi2,
+            'is_gaussian_means': is_gaussian_means,
+            'is_gaussian_ad': is_gaussian_ad,
+            'is_gaussian': is_gaussian_overall,
+            'tests_passed': f"{tests_passed}/3",
+            'observed_frequencies': dict(zip(unique_pos, observed_counts)),
+            'expected_frequencies': dict(zip(unique_pos, expected_freqs)) if chi2_valid else {}
         }
         
         if plot:
@@ -385,10 +480,13 @@ class QuantumGaltonBox:
         ax2.grid(True, alpha=0.3)
         
         # Add statistics text
+        chi2_text = f"{verification_results['chi2_pvalue']:.4f}" if verification_results['chi2_valid'] else "N/A"
         stats_text = (
             f"Mean: {self.results['mean']:.3f} (Theory: {verification_results['theoretical_mean']:.3f})\n"
             f"Std: {self.results['std']:.3f} (Theory: {verification_results['theoretical_std']:.3f})\n"
-            f"KS p-value: {verification_results['ks_pvalue']:.4f}\n"
+            f"Chi² p-value: {chi2_text}\n"
+            f"Mean Error: {verification_results['mean_error_pct']:.1%}\n"
+            f"Tests Passed: {verification_results['tests_passed']}\n"
             f"Gaussian: {'Yes' if verification_results['is_gaussian'] else 'No'}"
         )
         

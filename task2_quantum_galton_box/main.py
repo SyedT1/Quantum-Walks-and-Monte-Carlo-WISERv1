@@ -58,8 +58,18 @@ def demonstrate_single_circuit(num_layers: int = 4):
     print(f"\nGaussian Verification:")
     print(f"  - Theoretical mean: {verification['theoretical_mean']:.4f}")
     print(f"  - Theoretical std: {verification['theoretical_std']:.4f}")
-    print(f"  - KS test p-value: {verification['ks_pvalue']:.4f}")
-    print(f"  - Is Gaussian (p > 0.05): {verification['is_gaussian']}")
+    print(f"  - Mean error: {verification['mean_error_pct']:.1%}")
+    print(f"  - Std error: {verification['std_error_pct']:.1%}")
+    
+    if verification['chi2_valid']:
+        print(f"  - Chi² p-value: {verification['chi2_pvalue']:.4f}")
+        print(f"  - Chi² test: {'PASS' if verification['is_gaussian_chi2'] else 'FAIL'}")
+    else:
+        print(f"  - Chi² test: N/A (insufficient expected frequencies)")
+    
+    print(f"  - Tests passed: {verification['tests_passed']}")
+    print(f"  - Is Gaussian: {verification['is_gaussian']}")
+    print(f"  - Validity rate: {results['validity_rate']:.1%}")
     
     return qgb, results, verification
 

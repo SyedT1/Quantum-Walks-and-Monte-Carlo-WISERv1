@@ -89,7 +89,10 @@ class GaltonBoxSimulator:
                 'variance': sim_results['variance'],
                 'theoretical_mean': verification['theoretical_mean'],
                 'theoretical_std': verification['theoretical_std'],
-                'ks_pvalue': verification['ks_pvalue'],
+                'chi2_pvalue': verification['chi2_pvalue'] if verification['chi2_valid'] else np.nan,
+                'mean_error_pct': verification['mean_error_pct'],
+                'std_error_pct': verification['std_error_pct'],
+                'tests_passed': verification['tests_passed'],
                 'is_gaussian': verification['is_gaussian'],
                 'num_qubits': metrics['num_qubits'],
                 'circuit_depth': metrics['circuit_depth'],
@@ -99,7 +102,9 @@ class GaltonBoxSimulator:
             
             if verbose:
                 print(f"  Mean: {sim_results['mean']:.3f}, Std: {sim_results['std']:.3f}")
-                print(f"  KS p-value: {verification['ks_pvalue']:.4f}")
+                chi2_msg = f"{verification['chi2_pvalue']:.4f}" if verification['chi2_valid'] else "N/A"
+                print(f"  Chi² p-value: {chi2_msg}")
+                print(f"  Tests passed: {verification['tests_passed']}")
                 print(f"  Circuit depth: {metrics['circuit_depth']}, Gates: {metrics['total_gates']}")
                 print(f"  Time: {elapsed_time:.2f}s\n")
         
@@ -136,14 +141,26 @@ class GaltonBoxSimulator:
         
         # 3. Gaussian test p-values
         ax = axes[0, 2]
-        ax.plot(df['layers'], df['ks_pvalue'], 'go-')
-        ax.axhline(y=0.05, color='r', linestyle='--', label='α=0.05')
+        # Only plot valid chi-squared p-values
+        valid_mask = ~np.isnan(df['chi2_pvalue'])
+        if valid_mask.any():
+            valid_df = df[valid_mask]
+            ax.plot(valid_df['layers'], valid_df['chi2_pvalue'], 'go-')
+            ax.axhline(y=0.05, color='r', linestyle='--', label='α=0.05')
+            ax.set_yscale('log')
+        
+        # Also show mean error percentages
+        ax2 = ax.twinx()
+        ax2.plot(df['layers'], df['mean_error_pct'] * 100, 'b^-', alpha=0.7, label='Mean Error %')
+        ax2.set_ylabel('Mean Error (%)', color='b')
+        ax2.tick_params(axis='y', labelcolor='b')
+        
         ax.set_xlabel('Number of Layers')
-        ax.set_ylabel('KS Test p-value')
-        ax.set_title('Gaussian Distribution Test')
-        ax.legend()
+        ax.set_ylabel('Chi² Test p-value')
+        ax.set_title('Gaussian Distribution Tests')
+        ax.legend(loc='upper left')
+        ax2.legend(loc='upper right')
         ax.grid(True, alpha=0.3)
-        ax.set_yscale('log')
         
         # 4. Circuit depth scaling
         ax = axes[1, 0]
