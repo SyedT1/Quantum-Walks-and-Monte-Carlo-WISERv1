@@ -3,6 +3,79 @@
 ## Overview
 This project implements a generalized quantum algorithm for multi-layer Galton Box (bean machine) simulation based on the paper "Universal Statistical Simulator" by Mark Carney and Ben Varcoe (2022). The implementation creates quantum circuits that generate Gaussian distributions through quantum superposition of all possible trajectories.
 
+## Quantum SDK & Technical Specifications
+
+### SDK and Environment
+- **Quantum SDK**: [Qiskit](https://qiskit.org/) 0.45.0+
+- **Simulator Backend**: Qiskit Aer's `statevector_simulator`
+- **Connectivity**: Full all-to-all connectivity (no topology constraints)
+- **Python Version**: 3.8+ required
+- **Classical Processing**: NumPy, SciPy for statistical analysis
+
+### Simulator Configuration
+```python
+from qiskit_aer import AerSimulator
+
+# Noiseless statevector simulation with all-to-all connectivity
+backend = AerSimulator(method='statevector')
+# Supports up to 30 qubits without topology constraints
+# Perfect gate fidelity and coherence (noiseless environment)
+```
+
+### All-to-All Connectivity Confirmation
+The statevector simulator provides **unrestricted qubit connectivity**:
+- ✅ **No coupling map constraints** - any qubit can interact with any other qubit
+- ✅ **Perfect multi-qubit gates** - CCX (Toffoli), CSWAP (Fredkin) gates work between any qubits
+- ✅ **No routing overhead** - direct implementation of logical circuits
+- ✅ **Scalable to 20+ qubits** - sufficient for complex Galton box implementations
+
+This is essential for our implementation as we use:
+- **Cross-qubit entanglement**: CX gates between non-adjacent qubits
+- **Multi-qubit gates**: CCX gates requiring 3-qubit connectivity  
+- **Complex patterns**: CSWAP gates with arbitrary qubit selection
+
+## Circuit Visualizations
+
+### Sample Circuit Diagrams
+The repository includes high-quality visual circuit diagrams generated using Qiskit's matplotlib-based visualization:
+
+**1-Layer Simple Circuit** (Binomial Base Case):
+```
+       ┌───┐┌─┐
+coins: ┤ H ├┤M├
+       └───┘└╥┘
+  c: 1/══════╩═
+             0 
+```
+
+**2-Layer Simple Circuit** (Gaussian Approximation):
+```
+         ┌───┐┌─┐   
+coins_0: ┤ H ├┤M├───
+         ├───┤└╥┘┌─┐
+coins_1: ┤ H ├─╫─┤M├
+         └───┘ ║ └╥┘
+    c: 2/══════╩══╩═
+               0  1 
+```
+
+### Visual Circuit Generation
+Generate publication-quality circuit diagrams:
+```bash
+python visualize_circuits.py
+```
+
+This creates:
+- **Individual circuit diagrams** (`circuit_*layer_*_visual.png`) - Detailed view of each circuit type
+- **Comprehensive comparison** (`quantum_galton_circuits_comparison.png`) - Side-by-side analysis
+- **SDK verification** (`qiskit_sdk_verification.png`) - Demonstrates all-to-all connectivity
+
+All diagrams are 300 DPI with:
+- Color-coded gates for visual clarity
+- Technical specifications overlay
+- Complete qubit connectivity visualization
+- Verification of topology-free operation
+
 ## Project Structure
 ```
 task2_quantum_galton_box/
