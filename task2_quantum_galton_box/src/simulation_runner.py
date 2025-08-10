@@ -60,10 +60,10 @@ class GaltonBoxSimulator:
             
             # Create and simulate the circuit
             qgb = QuantumGaltonBox(n_layers)
-            circuit = qgb.generate_optimized_circuit()
+            circuit = qgb.generate_complex_circuit()
             
-            # Run simulation
-            sim_results = qgb.simulate(shots=self.shots, backend=self.backend)
+            # Run simulation  
+            sim_results = qgb.simulate(shots=self.shots, backend=self.backend, use_complex=True)
             
             # Verify Gaussian distribution
             verification = qgb.verify_gaussian(plot=False)
@@ -242,7 +242,8 @@ class GaltonBoxSimulator:
             ax.grid(True, alpha=0.3)
             
             # Add p-value annotation
-            ax.text(0.95, 0.95, f"p={verification['ks_pvalue']:.3f}",
+            chi2_text = f"{verification['chi2_pvalue']:.3f}" if verification['chi2_valid'] else "N/A"
+            ax.text(0.95, 0.95, f"χ²={chi2_text}",
                    transform=ax.transAxes, ha='right', va='top',
                    bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
         

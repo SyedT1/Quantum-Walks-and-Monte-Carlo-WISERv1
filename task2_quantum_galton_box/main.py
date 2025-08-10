@@ -28,9 +28,9 @@ def demonstrate_single_circuit(num_layers: int = 4):
     # Create Quantum Galton Box
     qgb = QuantumGaltonBox(num_layers)
     
-    # Generate optimized circuit
-    print("Generating optimized quantum circuit...")
-    circuit = qgb.generate_optimized_circuit()
+    # Generate complex circuit with more qubits and depth
+    print("Generating complex quantum circuit...")
+    circuit = qgb.generate_complex_circuit()
     
     # Display circuit information
     metrics = qgb.get_circuit_metrics()
@@ -44,7 +44,7 @@ def demonstrate_single_circuit(num_layers: int = 4):
     
     # Run simulation
     print(f"\nRunning noiseless simulation with 10,000 shots...")
-    results = qgb.simulate(shots=10000)
+    results = qgb.simulate(shots=10000, use_complex=True)
     
     print(f"\nSimulation Results:")
     print(f"  - Mean position: {results['mean']:.4f}")
@@ -125,7 +125,7 @@ def validate_against_paper():
     print("Testing 1-layer (single peg) circuit:")
     qgb1 = QuantumGaltonBox(num_layers=1)
     circuit1 = qgb1.generate_optimized_circuit()
-    results1 = qgb1.simulate(shots=10000)
+    results1 = qgb1.simulate(shots=10000, use_complex=False)
     
     # Should produce binary output with 50-50 probability
     unique, counts = np.unique(results1['positions'], return_counts=True)
@@ -141,7 +141,7 @@ def validate_against_paper():
     print("\nTesting 2-layer (3 peg) circuit:")
     qgb2 = QuantumGaltonBox(num_layers=2)
     circuit2 = qgb2.generate_optimized_circuit()
-    results2 = qgb2.simulate(shots=10000)
+    results2 = qgb2.simulate(shots=10000, use_complex=False)
     
     # Should produce trinomial output with 1:2:1 ratio
     freq_dict = {}
